@@ -1,0 +1,28 @@
+%% visualisation of single 
+
+clear all;
+clc;
+
+% Fieldtip startup
+addpath(genpath('/project/3018063.01/scripts_preproc/functions/'));
+startup;
+
+
+% Load the layout
+cfg = [];
+cfg.layout = 'CTF275_helmet.mat'; % specify your layout file
+layout = ft_prepare_layout(cfg);
+
+% Modify cfg to not show labels
+%   cfg.output      = filename to which the layout will be written (default = [])
+%   cfg.montage     = 'no' or a montage structure (default = 'no')
+%   cfg.image       = filename, use an image to construct a layout (e.g. usefull for ECoG grids)
+cfg.box = 'no';   %      = string, 'yes' or 'no' whether box should be plotted around electrode (default = 'yes')
+cfg.mask  = 'no'; %       = string, 'yes' or 'no' whether the mask should be plotted (default = 'yes')
+cfg.visible  = 'no'; %     = string, 'on' or 'off' whether figure will be visible (default = 'on')
+%   cfg.figure      = 'yes' or 'no', whether to open a new figure. You can also specify a figure handle from FIGURE, GCF or SUBPLOT. (default = 'yes')
+
+% Plot the layout
+ft_layoutplot(cfg, layout);
+
+% Now you can visually inspect the layout and note down the sensors you are interested in.

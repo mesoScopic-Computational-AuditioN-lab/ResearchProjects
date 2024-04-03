@@ -1,0 +1,6 @@
+{Error using load
+Unable to find file or directory '/project/3018063.01/beh/data/8/8_stimdf.mat'.
+
+Error in rundrex_stims (line 39)
+load( fullfile( input_dir, pp, [pp fn_suffix]), 'freq_range', 'oct_range', 'stims');
+} 
