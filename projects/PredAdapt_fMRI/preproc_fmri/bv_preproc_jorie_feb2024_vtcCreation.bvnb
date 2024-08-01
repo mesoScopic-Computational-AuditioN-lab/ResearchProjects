@@ -1,0 +1,456 @@
+{
+    "bvnbformat": 1,
+    "bvnbformat_minor": 0,
+    "cells": [
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "# Preprocessing pipeline of high-field fMRI data\n",
+                "- First we have cells to set the **general settings** (e.g. dictionary sellection and pp's / sessions to sellect etc)\n",
+                "- Second we **prepare the raw data** into an usable format\n",
+                "- Third we have cells for the preprocessing of **functional** data \n",
+                "- Fourth we have cells for the preprocessing of **anatomical** data\n",
+                "- Fifth we **coregister** functional - anatomical data\n",
+                "- Sixth we **create vtc** based on the coregistration "
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "#### BrainVoyager Method Convention\n",
+                "Many of BrainVoyagers build in function rely upon the `bv.` method. However, this `bv` method is not known by outside functions (in this case our .py files).\n",
+                "Luckaly we can, when running functions, add `bv` to the parameters. In practice we have to do this for MOST functions.\n",
+                "When A. the `bv` method is critical for completion of the function, it is always expected as the first parameter of the function. \n",
+                "When B. the `bv` method is only used for miscellaneous steps (e.g. for printing to BrainVoyager log) it is given as the last optional parameter, with its default value being `bv=None`. \n",
+                "For B. the function can function perfectly fine without the `bv` method and can work outside of the BrainVoyager ecosystem.\n",
+                "\n",
+                "Functions can be used both within one dataset and over multiple datasets (participants and sessions), where for example `create_fmr` creates a single fmr for one fun, `create_fmrs` loops over participants and sessions and runs to create all wanted fmrs (note that sessions can be a list of only one session: [1]). Similairly, processing using for example `isovoxel` will do this preprocessing step for a single vmr, where `isovoxel_all` is a higher level function doing a simple loop over multiple folders apllying isovoxel to multiple files.\n",
+                "\n",
+                "#### General Structure\n",
+                "The general approach places all functions within .py files (local modules) .\n",
+                "These files are the backbone of the preprocessing pipeline, and here is where the magic happens.\n",
+                "If any of the steps fail, the .py files for the corresponding step are the place to look.\n",
+                "\n",
+                "#### Direcotry Parsing\n",
+                "All methods are build to be able to parse through multiple participant and session folders.\n",
+                "The standard setup asks for a parent directory (i.e. `input_dir` or `output_dir`) containing the participant / session folders.\n",
+                "The participant folders are then found using a standard prefix (see `bv_preproc.utils.prefix`).\n",
+                "A completed path will follow the structure `input_dir`, `prefix(pp, ses)` (e.g. '/media/jorvhar/Data/MRIData/S02_SES1').\n",
+                "Note that it is highly suggested to place all files within folders following this `PPxxSESx` structure (alternatively you can change the prefix structure within `bv_preproc.utils.prefix`)."
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "### Load needed modules, as well as local modules "
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2751,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# First we import modules we generally need for our pipeline\n",
+                "import numpy as np\n",
+                "import pandas as pd\n",
+                "from os.path import join\n",
+                "\n",
+                "import os\n",
+                "import itertools\n",
+                "import re\n",
+                "import pickle\n",
+                "\n",
+                "import matplotlib.pyplot as plt\n",
+                "from matplotlib import animation\n",
+                "\n",
+                "from pydicom import dcmread\n",
+                "import nibabel \n",
+                "import bvbabel"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "local files shoulde be either located in the same folder as the bvnb folder, or specified in the `modpath` variable.\n",
+                "(feature iterations will move this to github)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2752,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# Now lets import local modules (.py files) in which we host our processing functions\n",
+                "modpath = '/media/jorvhar/Data1/OneDrive_Mint/Documenten/Matlab and Python short scripts/'     # direcotry where local files are located\n",
+                "import sys\n",
+                "sys.path.append(modpath)\n",
+                "\n",
+                "# then load the actual module\n",
+                "import bv_preproc\n",
+                "from bv_preproc.utils import prefix"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "***\n",
+                "# General Settings\n",
+                "For testing it may be advised to leave pps and sessions to a single value instead of a list"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2753,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# input parameters\n",
+                "pps            = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] # list of participant(s) to parse through (or single value)\n",
+                "sess           = [1, 2] # list of session(s) to parse through (or single value)\n",
+                "\n",
+                "# set directories\n",
+                "input_dir      = '/media/jorvhar/Data1/MRIData/'          # parent location of raw data (e.g. /Data/MRIData/[PP01Ses01] > /Data/MRIData/)\n",
+                "output_dir     = '/media/jorvhar/Data8T/MRIData/PreProc'  # parent location of output data"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "***\n",
+                "# Functional Data Preprocessing\n",
+                "Here we take the prepaired dicoms, create `fmr` and `stc` files from them, and apply multiple preprocessing steps.\n",
+                "Functions are able to locate preprocessing files automatically using BrainVoyagers naming convention.\n",
+                "\n",
+                "### Functional Data Settings"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2754,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# input parameters\n",
+                "n_runs_ses1          = [1, 2, 3, 4, 5, 6]    # number of runs to process\n",
+                "n_runs_ses2          = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]    # number of runs to process\n",
+                "skip_volumes_end     = 5                     # in some cases (e.g. when measuring extra noise volumes) we may want to skip the last few volumes\n",
+                "skip_volumes_start   = 0                     # (optional): how many volumes to skip at the start\n",
+                "create_sbreff        = True                  # (optional): create sbreff fmr file for first volume\n",
+                "\n",
+                "# mean volume settings\n",
+                "fromses = 2\n",
+                "toses = 1\n",
+                "meanovervols = 10"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "***\n",
+                "# Anatomical Data Preprocessing\n",
+                "We do the same for our anatomical data, first we take the prepaired dicoms, create `vmr` and `v16` files from them, and apply multiple preprocessing steps.\n",
+                "### Anatomical Settings"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2755,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "sess_anat           = [1] # list of session(s) to parse through (or single value) for ananatomical\n",
+                "\n",
+                "mp2rage_factor        = 6 # denoising factor for mp2rage noise\n",
+                "erosion_itter         = 4 # number of errosion itterations\n",
+                "erosion_mask_int      = 0.6 # intensity of erosion mask\n",
+                "\n",
+                "isovoxel_framing_cube = 512 # the framing cube to use for isovoxeled data \n",
+                "isovoxel_res          = 0.4 # target resolution\n",
+                "isovoxel_intp         = 2 # interpolation method for isovoxel (1:trilinear, 2:cubic spline, 3:sinc interpolation)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "***\n",
+                "# VTC Creation\n",
+                "The next, and last preprocessing step is to take our coregistered fmr volumes and create vtc files (voxel time course files), basically creating files that we can then easily use for analyses.\n",
+                "The implementation I use creates bounding boxes based on our first volume (so that we are somewhat limiting the data we have to save). \n",
+                "This bounding box is then used to create the actual vtc files (x from/to, y from/to, z from/to). The actual vtc files will have a resolution of to minus from in 3 dimensions * number of volumes.\n",
+                "### Settings"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2756,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# sellect list of fmr's and vmr file of interest\n",
+                "vmr_fn = 'uniden_IIHC_ISO-0.4.vmr'\n",
+                "\n",
+                "# sellect trf files\n",
+                "#ia_trf_fn = bv_preproc.voxeltimecourse.ia_fn(join(output_dir, prefix(2, 1)))[0]\n",
+                "#fa_trf_fn = bv_preproc.voxeltimecourse.fa_fn(join(output_dir, prefix(2, 1)))[0]\n",
+                "#acpc_trf_fn = bv_preproc.voxeltimecourse.acpc_fn(target_folder)[0]"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "### VTC Creation of all runs\n",
+                "We can now create vtc's off all runs within a session. When options for `vtc_list`, `ia_trf_fn`, `fa_trf_fn`, & `acpc_trf_fn` are left at `True` (default), the corresponding files are automatically obtained from the sellected directory."
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2757,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "#for pp in pps:\n",
+                "#    fmr_list = bv_preproc.utils.preproc_filenames(join(output_dir, prefix(pp, 1)), sbref=2, slicor=True,motcor=True,hpfil=True,tpsmo=False,topup=True)\n",
+                "#    bv_preproc.voxeltimecourse.create_vtc_bulk(bv, join(output_dir, prefix(pp,1)), vmr_fn, fmr_list, vtcspace=1)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "# from here redo, without gpu accel"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2758,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "## SESSION 1\n",
+                "\n",
+                "sess = [1]\n",
+                "\n",
+                "bv_preproc.voxeltimecourse.create_vtc_bulk_all(bv, output_dir, pps, sess, vmr_fn,  fmr_slicor=True,fmr_motcor=True,fmr_hpfil=True,fmr_tpsmo=False,fmr_topup=True, vtcspace=1)\n",
+                "\n",
+                "\n",
+                "\n",
+                "## SESSION 2\n",
+                "\n",
+                "from bv_preproc.utils import preproc_filenames\n",
+                "from bv_preproc.voxeltimecourse import bounding_box\n",
+                "\n",
+                "sess = [1]     # since bv assumes vtc starting from anatomical, we do the same > session is thus 1, and we later sellect fmr_dir using session 2\n",
+                "\n",
+                "# get trf information from other session\n",
+                "trf_dir = lambda pp, ses : join(output_dir, prefix(pp, 1))\n",
+                "# sellect where we get our fmrs from\n",
+                "fmr_dir = lambda pp, ses : join(output_dir, prefix(pp, 2))\n",
+                "# we also sellect a bounding box function, so get current bounding box of other session\n",
+                "bounding_box_array = lambda pp, ses : bounding_box(join(output_dir, \n",
+                "                                                   prefix(pp,1),\n",
+                "                                                   preproc_filenames(join(output_dir, prefix(pp, 1)), sbref=2, \n",
+                "                                                                     slicor=True,motcor=True,hpfil=True,tpsmo=False,topup=True, \n",
+                "                                                                     dtype='vtc')[0]), bv=bv)\n",
+                "\n",
+                "## then run again but for second session (again: defined by fmr_dir)\n",
+                "bv_preproc.voxeltimecourse.create_vtc_bulk_all(bv, output_dir, pps, sess, vmr_fn, first_vol_bounding_box=False,  \n",
+                "                                               bounding_box_lamb = bounding_box_array,\n",
+                "                                               trf_lamb=trf_dir, fmr_lamb=fmr_dir,\n",
+                "                                               fmr_slicor=True,fmr_motcor=True,fmr_hpfil=True,fmr_tpsmo=False,fmr_topup=True, vtcspace=1)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "### Read Bounding Box Dimensions\n",
+                "We can also read bounding box start and end positions from any vtc file."
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2759,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "#from bv_preproc.utils import preproc_filenames\n",
+                "#from bv_preproc.voxeltimecourse import bounding_box\n",
+                "#\n",
+                "#bounding_box_array = lambda pp, ses : bounding_box(join(output_dir, \n",
+                "#                                                   prefix(pp,1),\n",
+                "#                                                   preproc_filenames(join(output_dir, prefix(pp, 1)), sbref=2, \n",
+                "#                                                                     slicor=True,motcor=True,hpfil=True,tpsmo=False,topup=True, \n",
+                "#                                                                     dtype='vtc')[0]), bv=bv)\n",
+                "\n",
+                "#bounding_box_array(2, 1)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "### VTC Creation across sessions\n",
+                "And create `vtc` files arross sessions (here using the bounding box from the other measuring session)."
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2760,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "## look in documentation (and voxeltimecourse script) what goes into vtc creation - what bbr files / mash files do we use??"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2761,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "## note from before vakation, should still do session 2 vtc creation\n",
+                "\n",
+                "##pp = 1\n",
+                "\n",
+                "##fmr_dir = join(output_dir, prefix(pp, 2))\n",
+                "##fmr_list = bv_preproc.utils.preproc_filenames(fmr_dir, sbref=2, slicor=True,motcor=True,hpfil=True,tpsmo=False,topup=True)\n",
+                "\n",
+                "# obtain bounding box from other directory\n",
+                "##othersession_fmr_dir  = join(output_dir, prefix(pp, 1))\n",
+                "##othersession_fmr_list = bv_preproc.utils.preproc_filenames(othersession_fmr_dir, sbref=2, slicor=True,motcor=True,hpfil=True,tpsmo=False,topup=True)\n",
+                "#vtc_fn = bv_preproc.voxeltimecourse.vtc_names(othersession_fmr_list)[0]\n",
+                "#bounding_box_array = bv_preproc.voxeltimecourse.bounding_box(join(output_dir, prefix(pp,1), vtc_fn), bv=bv)\n",
+                "\n",
+                "    "
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2762,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# create list of fmrs within some folder\n",
+                "##for pp in pps:\n",
+                "##    fmr_dir = join(output_dir, prefix(pp, 2))\n",
+                "##    fmr_list = bv_preproc.utils.preproc_filenames(fmr_dir, sbref=2, slicor=True,motcor=True,hpfil=True,tpsmo=False,topup=True)\n",
+                "\n",
+                "    # obtain bounding box from other directory\n",
+                "##    othersession_fmr_dir  = join(output_dir, prefix(pp, 1))\n",
+                "##    othersession_fmr_list = bv_preproc.utils.preproc_filenames(othersession_fmr_dir, sbref=2, slicor=True,motcor=True,hpfil=True,tpsmo=False,topup=True)\n",
+                "##    vtc_fn = bv_preproc.voxeltimecourse.vtc_names(othersession_fmr_list)[0]\n",
+                "##    bounding_box_array = bv_preproc.voxeltimecourse.bounding_box(join(output_dir, prefix(pp,1), vtc_fn), bv=bv)\n",
+                "\n",
+                "    \n",
+                "    # create vtc of fmrs in different location)\n",
+                "    #bv_preproc.voxeltimecourse.create_vtc_bulk(bv, join(output_dir, prefix(pp, 1)), vmr_fn, fmr_list, \n",
+                "    #                                           first_vol_bounding_box = False,\n",
+                "    #                                           bounding_box_array = bounding_box_array,\n",
+                "    #                                           vtcspace=1, fmr_dir=fmr_dir, trf_dir=fmr_dir)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "#### (Alternativelly) VTC Creation looping over participants and sessions\n",
+                "Alternatively we could use the high level function `create_vtc_bulk_all` to loop over participants and sessions and do vtc creation for all.\n",
+                "Please note that one must be carefull with options within this function, it is for example highly advised to leave 'first_vol_bounding_box = True' to have consistence within an session.\n",
+                "Within this higher level function fmr files are looked up using the `preproc_filenames` function, make sure the correct proccesing steps are sellected."
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2763,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# or loop over all participants and sessions to do automatical vtc creation\n",
+                "#bv_preproc.voxeltimecourse.create_vtc_bulk_all(bv, output_dir, pps, sess_anat, vmr_fn, vtcspace=1,\n",
+                "#                                               fmr_slicor=True, fmr_motcor=True, fmr_hpfil=True,\n",
+                "#                                               fmr_tpsmo=True, fmr_topup=True)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "### VTC plotting\n",
+                "As a quick senity check, lets take the mean over time and plot some slices from the vtc (might take some time since we are loading MULTIPLE gb files)."
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2764,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "#ax, fig = bv_preproc.voxeltimecourse_plot.plot_vtcs(join(output_dir, prefix(2,1)), tpsmo=False, bv=bv)\n",
+                "#nbt.embed(fig)"
+            ]
+        }
+    ],
+    "log_brainvoyager_code": false,
+    "metadata": {
+    }
+}

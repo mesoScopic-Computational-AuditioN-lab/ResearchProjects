@@ -1,0 +1,324 @@
+{
+    "bvnbformat": 1,
+    "bvnbformat_minor": 0,
+    "cells": [
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "# Preprocessing pipeline of high-field fMRI data\n",
+                "- First we have cells to set the **general settings** (e.g. dictionary sellection and pp's / sessions to sellect etc)\n",
+                "- Second we **prepare the raw data** into an usable format\n",
+                "- Third we have cells for the preprocessing of **functional** data \n",
+                "- Fourth we have cells for the preprocessing of **anatomical** data\n",
+                "- Fifth we **coregister** functional - anatomical data\n",
+                "- Sixth we **create vtc** based on the coregistration "
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "#### BrainVoyager Method Convention\n",
+                "Many of BrainVoyagers build in function rely upon the `bv.` method. However, this `bv` method is not known by outside functions (in this case our .py files).\n",
+                "Luckaly we can, when running functions, add `bv` to the parameters. In practice we have to do this for MOST functions.\n",
+                "When A. the `bv` method is critical for completion of the function, it is always expected as the first parameter of the function. \n",
+                "When B. the `bv` method is only used for miscellaneous steps (e.g. for printing to BrainVoyager log) it is given as the last optional parameter, with its default value being `bv=None`. \n",
+                "For B. the function can function perfectly fine without the `bv` method and can work outside of the BrainVoyager ecosystem.\n",
+                "\n",
+                "Functions can be used both within one dataset and over multiple datasets (participants and sessions), where for example `create_fmr` creates a single fmr for one fun, `create_fmrs` loops over participants and sessions and runs to create all wanted fmrs (note that sessions can be a list of only one session: [1]). Similairly, processing using for example `isovoxel` will do this preprocessing step for a single vmr, where `isovoxel_all` is a higher level function doing a simple loop over multiple folders apllying isovoxel to multiple files.\n",
+                "\n",
+                "#### General Structure\n",
+                "The general approach places all functions within .py files (local modules) .\n",
+                "These files are the backbone of the preprocessing pipeline, and here is where the magic happens.\n",
+                "If any of the steps fail, the .py files for the corresponding step are the place to look.\n",
+                "\n",
+                "#### Direcotry Parsing\n",
+                "All methods are build to be able to parse through multiple participant and session folders.\n",
+                "The standard setup asks for a parent directory (i.e. `input_dir` or `output_dir`) containing the participant / session folders.\n",
+                "The participant folders are then found using a standard prefix (see `bv_preproc.utils.prefix`).\n",
+                "A completed path will follow the structure `input_dir`, `prefix(pp, ses)` (e.g. '/media/jorvhar/Data/MRIData/S02_SES1').\n",
+                "Note that it is highly suggested to place all files within folders following this `PPxxSESx` structure (alternatively you can change the prefix structure within `bv_preproc.utils.prefix`)."
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "### Load needed modules, as well as local modules "
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2933,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# First we import modules we generally need for our pipeline\n",
+                "import numpy as np\n",
+                "import pandas as pd\n",
+                "from os.path import join\n",
+                "\n",
+                "import os\n",
+                "import itertools\n",
+                "import re\n",
+                "import pickle\n",
+                "\n",
+                "import matplotlib.pyplot as plt\n",
+                "from matplotlib import animation\n",
+                "\n",
+                "from pydicom import dcmread\n",
+                "import nibabel \n",
+                "import bvbabel"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "local files shoulde be either located in the same folder as the bvnb folder, or specified in the `modpath` variable.\n",
+                "(feature iterations will move this to github)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2934,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# Now lets import local modules (.py files) in which we host our processing functions\n",
+                "modpath = '/media/jorvhar/Data1/OneDrive_Mint/Documenten/Matlab and Python short scripts/'     # direcotry where local files are located\n",
+                "import sys\n",
+                "sys.path.append(modpath)\n",
+                "\n",
+                "# then load the actual module\n",
+                "import bv_preproc\n",
+                "from bv_preproc.utils import prefix"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "***\n",
+                "# General Settings\n",
+                "For testing it may be advised to leave pps and sessions to a single value instead of a list"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2937,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# input parameters\n",
+                "pps            = [10] # list of participant(s) to parse through (or single value)\n",
+                "sess           = [1, 2] # list of session(s) to parse through (or single value)\n",
+                "\n",
+                "# set directories\n",
+                "input_dir      = '/media/jorvhar/Data1/MRIData/'          # parent location of raw data (e.g. /Data/MRIData/[PP01Ses01] > /Data/MRIData/)\n",
+                "output_dir     = '/media/jorvhar/Data1/MRIData/PreProc/'  # parent location of output data"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "***\n",
+                "# Prepair Dicoms\n",
+                "Here we prepair the raw (Siemens) dicom files and prepair them to be used in the BrainVoyager ecosystem.\n",
+                "We first create a new output directory for each participant and session to be used for placing preprocessed (BrainVoyager) files .\n",
+                "Next we rename the raw dicom files and reorganise them into a BrainVoyager readable format."
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2938,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# prepair output directories and rename dicoms of all input folders\n",
+                "bv_preproc.prepdicoms.prep_outputs(output_dir, pps, sess, bv)\n",
+                "bv_preproc.prepdicoms.prep_dicoms(input_dir, pps, sess, bv)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "Optionally: if you want to get a better insight into what these raw dicom files actually contain we can run `bv_preproc.prepdicoms.extract_dir_information(join(input_dir, prefix(ppnum, sesnum)), bv=bv)`.\n",
+                "This functions intelligently parses through the (already renamed) dicom files and saves header information in `csv` and `html` format (placed within the dicom folder)."
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2930,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "df = bv_preproc.prepdicoms.extract_dir_information(join(input_dir, prefix(10, 2)), bv=bv)\n",
+                "# in my case, one run crashed and only measured some volumes, this is nice and easy to see using the csv or html file\n",
+                "# we can then manually delete these items or use `os.remove(filepath)`"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "***\n",
+                "# Functional Data Preprocessing\n",
+                "Here we take the prepaired dicoms, create `fmr` and `stc` files from them, and apply multiple preprocessing steps.\n",
+                "Functions are able to locate preprocessing files automatically using BrainVoyagers naming convention.\n",
+                "\n",
+                "### Functional Data Settings"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2939,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# input parameters\n",
+                "n_runs_ses1          = [1, 2, 3, 4, 5, 6]    # number of runs to process\n",
+                "n_runs_ses2          = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]    # number of runs to process\n",
+                "skip_volumes_end     = 5                     # in some cases (e.g. when measuring extra noise volumes) we may want to skip the last few volumes\n",
+                "skip_volumes_start   = 0                     # (optional): how many volumes to skip at the start\n",
+                "create_sbreff        = True                  # (optional): create sbreff fmr file for first volume"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "***\n",
+                "# Anatomical Data Preprocessing\n",
+                "We do the same for our anatomical data, first we take the prepaired dicoms, create `vmr` and `v16` files from them, and apply multiple preprocessing steps.\n",
+                "### Anatomical Settings"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2940,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "pps            = [10] # list of participant(s) to parse through (or single value)\n",
+                "sess_anat           = [1] # list of session(s) to parse through (or single value) for ananatomical\n",
+                "\n",
+                "mp2rage_factor        = 6 # denoising factor for mp2rage noise\n",
+                "erosion_itter         = 4 # number of errosion itterations\n",
+                "erosion_mask_int      = 0.6 # intensity of erosion mask\n",
+                "\n",
+                "isovoxel_framing_cube = 512 # the framing cube to use for isovoxeled data \n",
+                "isovoxel_res          = 0.4 # target resolution\n",
+                "isovoxel_intp         = 3 # interpolation method for isovoxel (1:trilinear, 2:cubic spline, 3:sinc interpolation)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "### Create Anatomical \n",
+                "First we create the necessary files using `create_vmr` or `create_vmrs`, note that these function rely on keywords obtained from the raw dicom files (which need to be be prepaired using the steps outlined in `Prepair Dicoms`). Possible keywords can be T1, Mp2rage etc., though these are not exclusive and should be added to the `anatomical_dir_information` function for feature formats (or alternatively, this step can be done manually be creating vmr for the needed file format)."
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2941,
+            "metadata": {
+            },
+            "outputs": [
+                {
+                    "name": "stdout",
+                    "output_type": "stream",
+                    "text": [
+                        "Traceback (most recent call last):\n",
+                        "  File \"<string>\", line 1, in <module>\n",
+                        "  File \"/media/jorvhar/Data1/OneDrive_Mint/Documenten/Matlab and Python short scripts/bv_preproc/anatomical.py\", line 37, in create_vmrs\n",
+                        "    create_vmr(bv, anat_dict, join(input_dir, prefix(pp,ses)), join(output_dir, prefix(pp,ses)), key=key, format=format)\n",
+                        "  File \"/media/jorvhar/Data1/OneDrive_Mint/Documenten/Matlab and Python short scripts/bv_preproc/anatomical.py\", line 50, in create_vmr\n",
+                        "    file           = anat_dict[key][f][0]\n",
+                        "IndexError: list index out of range"
+                    ]
+                }
+            ],
+            "source": [
+                "bv_preproc.anatomical.create_vmrs(bv, input_dir, output_dir, pps, sess_anat, key='KeysMp2rage')\n",
+                "bv_preproc.anatomical.create_vmrs(bv, input_dir, output_dir, pps, sess_anat, key='KeysT1')\n",
+                "bv_preproc.anatomical.create_vmrs(bv, input_dir, output_dir, pps, [1, 2], key='KeysAngulated')"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "### Denoise MP2Rage Data"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": 2942,
+            "metadata": {
+            },
+            "outputs": [
+                {
+                    "name": "stdout",
+                    "output_type": "stream",
+                    "text": [
+                        "V16 saved.\n",
+                        "VMR saved."
+                    ]
+                }
+            ],
+            "source": [
+                "bv_preproc.anatomical.mp2rage_genuniden_all(output_dir, pps, sess_anat, mp2rage_factor, bv=bv)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+            ]
+        }
+    ],
+    "log_brainvoyager_code": false,
+    "metadata": {
+    }
+}
