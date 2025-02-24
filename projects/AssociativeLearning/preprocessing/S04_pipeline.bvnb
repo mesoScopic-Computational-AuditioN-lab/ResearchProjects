@@ -1,0 +1,1518 @@
+{
+    "bvnbformat": 1,
+    "bvnbformat_minor": 0,
+    "cells": [
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "# fMRI Data Preprocesssing\n",
+                "\n",
+                "\n",
+                "## Subject 04"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "import re\n",
+                "import json\n",
+                "import shutil\n",
+                "import imageio\n",
+                "import pydicom\n",
+                "import bvbabel\n",
+                "import nighres\n",
+                "import numpy as np\n",
+                "import nibabel as nb\n",
+                "\n",
+                "from glob import glob\n",
+                "from pprint import pprint\n",
+                "from importlib import reload\n",
+                "import matplotlib.pyplot as plt\n",
+                "from mpl_toolkits.mplot3d import Axes3D, art3d\n",
+                "\n",
+                "import bvpreproc\n",
+                "from bvpreproc import BVPP"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "## 0\\. Set global variables"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "subject_id = 'S04'\n",
+                "\n",
+                "project_directory = f'/path/to/data/{subject_id}'\n",
+                "target_directory = f'/{subject_id}_PP/'\n",
+                "\n",
+                "# no need to change anything below this line\n",
+                "\n",
+                "target_folder = project_directory + target_directory\n",
+                "if not os.path.exists(target_folder):\n",
+                "    os.mkdir(target_folder)\n",
+                "\n",
+                "data_folder = f'{project_directory}/RAW/'\n",
+                "raw_folder = f'{target_folder}/fmr/'\n",
+                "vmr_folder = f'{target_folder}/vmr/'\n",
+                "scan_time_corrected_folder = f'{target_folder}/fmr_SCSTBL/'\n",
+                "motion_corrected_folder = f'{target_folder}/fmr_SCSTBL_3DMCTS/'\n",
+                "high_pass_folder = f'{target_folder}/fmr_SCSTBL_3DMCTS_HPF/'\n",
+                "nii_folder = f'{target_folder}/nii/'\n",
+                "topup_folder = f'{target_folder}/fmr_topup/'\n",
+                "vtc_folder = f'{target_folder}/vtc/'\n",
+                "\n",
+                "use_nordic = False\n",
+                "\n",
+                "# changes directory so that brainvoyager doesn't get confused.\n",
+                "os.chdir(target_folder)\n",
+                "\n",
+                "bvpp = BVPP(bv, project_directory, subject_id)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "## 1\\. Rename dicom files\n",
+                "\n",
+                "DICOM filename format: series number (0020,0011), acquisition (volume) number (0020,0012) and instance (image) number (0020,0013)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "print(data_folder)\n",
+                "bv.rename_dicoms(data_folder)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "## 2\\. Create FMR files"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "fmr_dict = bvpp.create_fmr_dict(data_folder, use_nordic=use_nordic, save=target_folder)\n",
+                "\n",
+                "pprint(fmr_dict)\n",
+                "print(len(fmr_dict))"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "fmr_filenames = []\n",
+                "for filename in fmr_dict:\n",
+                "    fmr_filenames.append(bvpp.create_fmr(fmr_dict[filename], data_folder, target_folder, use_nordic=use_nordic))"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "import json\n",
+                "\n",
+                "# validate volume count\n",
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "whatOn_fmr_dict = {v['run']:v for k,v in fmr_dict.items() if v['condition'] == 'WhatOn'}\n",
+                "whatOff_fmr_dict = {v['run']:v for k,v in fmr_dict.items() if v['condition'] == 'WhatOff'}\n",
+                "\n",
+                "whatOn_filename = f'/path/to/data/{subject_id}/LOG/data/WhatOn_sub_{subject_id[1:]}_total_TRs.txt'\n",
+                "whatOff_filename = f'/path/to/data/{subject_id}/LOG/data/WhatOff_sub_{subject_id[1:]}_total_TRs.txt'\n",
+                "\n",
+                "print('\\nWhatOn')\n",
+                "bvpp.validate_volume_count(whatOn_fmr_dict, whatOn_filename)\n",
+                "print('\\nWhatOff')\n",
+                "bvpp.validate_volume_count(whatOff_fmr_dict, whatOff_filename)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "## 3\\. Create VMR files"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "vmr_dict = bvpp.create_vmr_dict(data_folder, save=target_folder)\n",
+                "\n",
+                "pprint(vmr_dict)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "vmr_filenames = [bvpp.create_vmr(data_folder, vmr_dict[filename], target_folder) for filename in vmr_dict]"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "pprint(vmr_filenames)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "### Nordic Specific Processing"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "if use_nordic:\n",
+                "\n",
+                "    conditions = list(set(item['condition'] for item in list(fmr_dict.values())))\n",
+                "\n",
+                "    if not os.path.exists(f'{target_folder}/nii/'):\n",
+                "        os.mkdir(f'{target_folder}/nii/')\n",
+                "\n",
+                "    for c in conditions:\n",
+                "        condition_path = f'{target_folder}/nii/{c}/'\n",
+                "        if not os.path.exists(condition_path):\n",
+                "            os.mkdir(condition_path)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# copy relevant dcm files to new sub-directories\n",
+                "\n",
+                "if use_nordic:\n",
+                "    for k,v in fmr_dict.items():\n",
+                "        for c in conditions:\n",
+                "            condition_path = f'{target_folder}/nii/{c}/'\n",
+                "            if v['condition'] == c:\n",
+                "                filename = k.split('0001-00001.dcm')[0]\n",
+                "                for file in glob(f'{data_folder}/{filename}*'): shutil.copy(file, condition_path)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# convert dcm to nifti\n",
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "if use_nordic:\n",
+                "    for c in conditions:\n",
+                "        condition_path = f'{target_folder}/nii/{c}/'\n",
+                "        bvpp.convert_dcm_to_nifti(project_directory, condition_path, condition_path)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# delete dcm files\n",
+                "\n",
+                "if use_nordic:\n",
+                "    for c in conditions:\n",
+                "        condition_path = f'{target_folder}/nii/{c}/'\n",
+                "        for filename in glob(f'{condition_path}*.dcm'): os.remove(filename)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# prepare nordic script\n",
+                "\n",
+                "if use_nordic:\n",
+                "    for c in conditions:\n",
+                "        condition_path = f'{target_folder}/nii/{c}/'\n",
+                "        shutil.copy(f'{project_directory}/Nordic/NIFTI_NORDIC_Github.m', condition_path)\n",
+                "        shutil.copy(f'{project_directory}/Nordic/RunNordic_Github_v2.m', condition_path)\n",
+                "        with open(f'{condition_path}/RunNordic_Github_v2.m', 'r') as f:  data = f.read().replace('<-PATH->', condition_path)\n",
+                "        with open(f'{condition_path}/RunNordic_Github_v2.m', 'wt') as f: f.write(data)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# run actual matlab code for nordic\n",
+                "\n",
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "if use_nordic:\n",
+                "    for c in conditions:\n",
+                "        condition_path = f'{target_folder}/nii/{c}/'\n",
+                "        bvpp.run_nordic(condition_path)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# cut last 5 volumes\n",
+                "\n",
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "if use_nordic:\n",
+                "    filenames_with_discarded_volume = {c:[] for c in conditions}\n",
+                "    for c in conditions:\n",
+                "        condition_path = f'{target_folder}/nii/{c}/*'\n",
+                "        for filename in glob(condition_path):\n",
+                "            if 'NORDIC_patch17' in filename:\n",
+                "                # discard last 5 volumes\n",
+                "                if '.mat' not in filename and 'nonoise' not in filename and '.nii' in filename:\n",
+                "                    print(f'discarding last 5 volumes of {filename.split(\"/\")[-1]}', end=' ')\n",
+                "                    nifti_data = nb.load(filename) # note, if you have currupted data, this might fail.\n",
+                "                    img_vol = np.array(nifti_data.dataobj)[:, :, :, :-5]\n",
+                "                    new_img = nb.Nifti1Image(img_vol, nifti_data.affine)\n",
+                "                    new_filename = filename.split('.')[0] + '_nonoise.nii'\n",
+                "                    new_img.to_filename(new_filename)\n",
+                "                    print('done!')\n",
+                "                    filenames_with_discarded_volume[c].append(new_filename)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "\n",
+                "if use_nordic:\n",
+                "    filenames_with_discarded_volume = {c:[] for c in conditions}\n",
+                "    for c in conditions:\n",
+                "        condition_path = f'{target_folder}/nii/{c}/*'\n",
+                "        filenames_with_discarded_volume[c] = glob(f'{condition_path}_nonoise.nii')"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# convert nii to fmr\n",
+                "\n",
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "if use_nordic:\n",
+                "    fmr_filenames = []\n",
+                "    for c in conditions:\n",
+                "        for filename in filenames_with_discarded_volume[c]:\n",
+                "            # convert to fmr\n",
+                "            nifti_filename = filename.split('/')[-1]\n",
+                "            if len(nifti_filename.split('_')) == 15:\n",
+                "                _, _, _, condition, _, _, _, _, _, _, _, run_idx, _, _, _ = nifti_filename.split('_')\n",
+                "            elif len(nifti_filename.split('_')) == 16:\n",
+                "                _, _, _, condition, _, _, _, _, _, _, _, _, run_idx, _, _, _ = nifti_filename.split('_')\n",
+                "                \n",
+                "            fmr_filename = f'{raw_folder}/{subject_id}_{c}_{run_idx}_M_nordic.fmr'\n",
+                "            print(f'converting {filename.split(\"/\")[-1]} to {fmr_filename.split(\"/\")[-1]}')\n",
+                "            fmr_filenames.append(bvpp.convert_nifti_to_fmr(filename, fmr_filename))"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "## 4. Create AP fmr from run1 and PA fmr"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "with open(target_folder + '/fmr_info.json', 'r') as f: fmr_dict = json.load(f)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# find run1 AP    \n",
+                "for key in fmr_dict.keys():\n",
+                "#    print(fmr_dict[key])\n",
+                "    if fmr_dict[key]['run'] == 'run1' and fmr_dict[key]['condition'] == 'WhatOn' and fmr_dict[key][\"signal\"] == 'M' and fmr_dict[key][\"n_volumes\"] > 10:\n",
+                "        print(f'dicom of WhatOn run1 and n_vol={fmr_dict[key][\"n_volumes\"]} is: \\t{key} \\tsignal={fmr_dict[key][\"signal\"]}')\n",
+                "        AP_dict = fmr_dict[key]\n",
+                "        break"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# create AP fmr from first 5 Vols\n",
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "os.chdir(data_folder)\n",
+                "\n",
+                "ap_filename = bvpp.create_fmr(data_folder, AP_dict, target_folder, first_5_vols=True)\n",
+                "ap_filename"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# find PA\n",
+                "\n",
+                "for dicom_filename in glob(data_folder + '/*-0001-00001.dcm'):\n",
+                "    try:\n",
+                "        ds = pydicom.read_file(dicom_filename)\n",
+                "        if '_PA' in ds.SeriesDescription and ds.ImageType[2] == 'M' and 'SBRef' not in ds.SeriesDescription:\n",
+                "            key = dicom_filename.split(\"/\")[-1]\n",
+                "            dicom_filename = key\n",
+                "            print(f'found dicom of PA with series description {ds.SeriesDescription} is: \\t {key}')\n",
+                "            break\n",
+                "    except Exception as e:\n",
+                "        print(e)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# create PA fmr\n",
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "prefix = 'fdm_091122_ME_S10_ses1'\n",
+                "\n",
+                "PA_dict = {'condition': 'PA',\n",
+                "           'filename': dicom_filename,\n",
+                "           'n_volumes': bvpp.get_n_volumes(data_folder, prefix, pydicom.read_file(f'{data_folder}/{dicom_filename}')),\n",
+                "           'run': 'run1',\n",
+                "           'signal': 'M',\n",
+                "           'subject_id': subject_id}\n",
+                "\n",
+                "pa_filename = bvpp.create_fmr(data_folder, PA_dict, target_folder)\n",
+                "pa_filename"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "## 5. Slice Scan Time Correction"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "fmr_filenames = glob(raw_folder + '*.fmr')\n",
+                "pprint(fmr_filenames)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "sinc_interpolation = 2\n",
+                "\n",
+                "os.chdir(target_folder + '/fmr/')\n",
+                "\n",
+                "processed_directory = target_folder + '/fmr_SCSTBL/'\n",
+                "if not os.path.exists(target_folder + '/fmr_SCSTBL'):\n",
+                "    os.mkdir(target_folder + '/fmr_SCSTBL')\n",
+                "            \n",
+                "fmr_stctbl_filenames = []\n",
+                "for filename in fmr_filenames: # + [ap_filename, pa_filename]:\n",
+                "    fmr_doc = bv.open(filename)\n",
+                "    \n",
+                "    print(filename)\n",
+                "\n",
+                "    if not os.path.isfile(processed_directory + fmr_doc.file_name.split('/')[-1].replace('.fmr', '_SCSTBL.fmr')):\n",
+                "        fmr_doc.correct_slicetiming_using_timingtable(sinc_interpolation)\n",
+                "        preprocessed_fmr_name = shutil.move(fmr_doc.preprocessed_fmr_name, processed_directory)\n",
+                "        shutil.move(fmr_doc.preprocessed_fmr_name.replace('.fmr', '.stc'), processed_directory)\n",
+                "        fmr_stctbl_filenames.append(preprocessed_fmr_name)\n",
+                "    else:\n",
+                "        fmr_stctbl_filenames.append(processed_directory + fmr_doc.file_name.split('/')[-1].replace('.fmr', '_SCSTBL.fmr'))\n",
+                "\n",
+                "    fmr_doc.close()        "
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "## 6. Motion Correction\n",
+                "\n",
+                "We will have all runs alligned to each other. For that we motion correct everything to volume 1 of AP."
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "if use_nordic:\n",
+                "    fmr_stctbl_filenames = glob(target_folder + '/fmr_SCSTBL/*nonoise*.fmr')\n",
+                "else:\n",
+                "    fmr_stctbl_filenames = glob(target_folder + '/fmr_SCSTBL/*.fmr')\n",
+                "\n",
+                "fmr_stctbl_filenames.sort()\n",
+                "pprint(fmr_stctbl_filenames)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "\n",
+                "trilinear_with_motion_detection = 2\n",
+                "\n",
+                "run1_filename = glob(target_folder + 'fmr_SCSTBL/*WhatOn*run1*.fmr')[0]\n",
+                "\n",
+                "processed_directory = target_folder + 'fmr_SCSTBL_3DMCTS/'\n",
+                "if not os.path.exists(target_folder + 'fmr_SCSTBL_3DMCTS'):\n",
+                "    os.mkdir(target_folder + 'fmr_SCSTBL_3DMCTS')\n",
+                "            \n",
+                "fmr_mc_filenames = []\n",
+                "for filename in fmr_stctbl_filenames:\n",
+                "    fmr_doc = bv.open(filename, True)\n",
+                "    print(filename)\n",
+                "    \n",
+                "    os.chdir(data_folder)\n",
+                "    fmr_doc.correct_motion_to_run_ext(run1_filename,\n",
+                "                                      0, # first volume\n",
+                "                                      trilinear_with_motion_detection,\n",
+                "                                      True, # full dataset\n",
+                "                                      100, # max iterations\n",
+                "                                      False, # create movie\n",
+                "                                      True) # extended log file\n",
+                "    \n",
+                "    try:\n",
+                "        preprocessed_fmr_name = shutil.move(fmr_doc.preprocessed_fmr_name, processed_directory)\n",
+                "        shutil.move(fmr_doc.preprocessed_fmr_name.replace('.fmr', '.stc'), processed_directory)\n",
+                "        shutil.move(fmr_doc.preprocessed_fmr_name.replace('3DMCTS.fmr', '3DMC.log'), processed_directory) # validate this!\n",
+                "        shutil.move(fmr_doc.preprocessed_fmr_name.replace('3DMCTS.fmr', '3DMC.sdm'), processed_directory) # validate this!\n",
+                "\n",
+                "        fmr_mc_filenames.append(processed_directory + fmr_doc.preprocessed_fmr_name.split('/')[-1])\n",
+                "    except Exception as e:\n",
+                "        print(e)\n",
+                "    \n",
+                "    fmr_doc.close()"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "fmr_mc_filenames = glob(motion_corrected_folder + '*.fmr')\n",
+                "fmr_mc_filenames.sort()\n",
+                "pprint(fmr_mc_filenames)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "### Plots"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "fmr_mc_filenames = glob(motion_corrected_folder + '/*.fmr')"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "os.chdir(target_folder)\n",
+                "\n",
+                "# plot motion parameters for the whaton condition\n",
+                "keys = ['dx', 'dy', 'dz', 'rx', 'ry', 'rz']\n",
+                "\n",
+                "\n",
+                "filenames = [filename for filename in fmr_mc_filenames if 'WhatOn' in filename and 'AP' not in filename]\n",
+                "filenames.sort()\n",
+                "\n",
+                "fig = bvpp.plot_motion_params_all_runs(filenames, keys)\n",
+                "plt.suptitle('Motion Correction Prameters (WhatOn)')\n",
+                "plt.tight_layout()\n",
+                "nbt.embed(fig)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "filenames = [filename for filename in fmr_mc_filenames if 'WhatOff' in filename and 'AP' not in filename]\n",
+                "filenames.sort()\n",
+                "fig = bvpp.plot_motion_params_all_runs(filenames, keys)\n",
+                "plt.suptitle('Motion Correction Prameters (WhatOff)')\n",
+                "plt.tight_layout()\n",
+                "nbt.embed(fig)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "fmr_mc_filenames = glob(motion_corrected_folder + '*.fmr')"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# plot before and after motion correction\n",
+                "\n",
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "if use_nordic:\n",
+                "    fmr_filenames = glob(raw_folder + '*nonoise.fmr')\n",
+                "else:\n",
+                "    fmr_filenames = glob(raw_folder + '*.fmr')\n",
+                "\n",
+                "slice = 33\n",
+                "volume = 100\n",
+                "\n",
+                "post_mc_filenames = [filename for filename in fmr_mc_filenames if 'WhatOn' in filename and 'AP' not in filename]\n",
+                "post_mc_filenames.sort()\n",
+                "pre_mc_filenames = [filename for filename in fmr_filenames if '_P_' not in filename and '_AP' not in filename  and 'WhatOn' in filename]\n",
+                "pre_mc_filenames.sort()\n",
+                "\n",
+                "run1_filename = glob(motion_corrected_folder + '*WhatOn_run1*.fmr')[0]\n",
+                "run1_first_volume = bvbabel.fmr.read_fmr(run1_filename)[1][:,:,slice,1]\n",
+                "\n",
+                "fig = bvpp.plot_pre_post_motion_correction(slice, volume, post_mc_filenames, pre_mc_filenames, run1_first_volume)\n",
+                "    \n",
+                "plt.suptitle(f'WhatOn\\nslice = {slice}\\nvolume = vol_{volume} - vol_1')\n",
+                "plt.tight_layout()\n",
+                "nbt.embed(fig)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# plot before and after motion correction\n",
+                "\n",
+                "post_mc_filenames = [filename for filename in fmr_mc_filenames if 'WhatOff' in filename]\n",
+                "pre_mc_filenames = [filename for filename in fmr_filenames if '_P_' not in filename  and 'WhatOff' in filename]\n",
+                "\n",
+                "fig = bvpp.plot_pre_post_motion_correction(slice, volume, post_mc_filenames, pre_mc_filenames, run1_first_volume)\n",
+                "    \n",
+                "plt.suptitle(f'WhatOff\\nslice = {slice}\\nvolume = vol_{volume} - vol_1')\n",
+                "plt.tight_layout()\n",
+                "nbt.embed(fig)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "## 7. High-Pass Filtering"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "fmr_mc_filenames = glob(motion_corrected_folder + '*.fmr')\n",
+                "\n",
+                "# For WhatOn\n",
+                "n_cycles = 7\n",
+                "filenames = [filename for filename in fmr_mc_filenames if 'WhatOn' in filename]\n",
+                "fmr_hpf_filenames = []\n",
+                "for filename in filenames:\n",
+                "    fmr_doc = bv.open(filename, True)\n",
+                "    fmr_doc.filter_temporal_highpass_glm_fourier(n_cycles)\n",
+                "    fmr_hpf_filenames.append(fmr_doc.preprocessed_fmr_name)\n",
+                "\n",
+                "# For WhatOff\n",
+                "n_cycles = 6\n",
+                "filenames = [filename for filename in fmr_mc_filenames if 'WhatOff' in filename]\n",
+                "for filename in filenames:\n",
+                "    fmr_doc = bv.open(filename, True)\n",
+                "    fmr_doc.filter_temporal_highpass_glm_fourier(n_cycles)\n",
+                "    fmr_hpf_filenames.append(fmr_doc.preprocessed_fmr_name)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "processed_directory = target_folder + '/fmr_SCSTBL_3DMCTS_HPF/'\n",
+                "if not os.path.exists(target_folder + '/fmr_SCSTBL_3DMCTS_HPF'):\n",
+                "    os.mkdir(target_folder + '/fmr_SCSTBL_3DMCTS_HPF')\n",
+                "\n",
+                "for filename in fmr_hpf_filenames:\n",
+                "    shutil.move(filename, processed_directory)\n",
+                "    shutil.move(filename.replace('.fmr', '.stc'), processed_directory)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "## 8. Low-Pass Filtering\n",
+                "\n",
+                " This is not performed."
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "## 9. Distortion Correction (With FSL Topup)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "if not os.path.exists(target_folder + '/nii'):\n",
+                "    os.mkdir(target_folder + '/nii')\n",
+                "\n",
+                "if not use_nordic:\n",
+                "    # convert files to nifti\n",
+                "    ap_nii_filename = bvpp.convert_fmr_to_nifti(raw_folder, raw_folder+ap_filename)\n",
+                "    pa_nii_filename = bvpp.convert_fmr_to_nifti(raw_folder, raw_folder+pa_filename)\n",
+                "    \n",
+                "    # merge ap and pa files\n",
+                "    appa_nii_filename = bvpp.fsl_merge(nii_folder, ap_nii_filename, pa_nii_filename, subject_id, 'run1')\n",
+                "    \n",
+                "    # create topup map\n",
+                "    acqparams_filename = bvpp.create_acquisition_parameters(target_folder, pattern='APPA')\n",
+                "    b02b0_filename = bvpp.create_b02b0_cnf(target_folder)\n",
+                "\n",
+                "    topup_output_filename = bvpp.fsl_topup(nii_folder+appa_nii_filename, target_folder+acqparams_filename, target_folder+b02b0_filename)\n",
+                "    shutil.move(topup_output_filename, target_folder)\n",
+                "else:\n",
+                "    # use topup map from original data\n",
+                "    nonordic_target_folder = target_folder.replace('_nordic', '').replace('_redo', '')\n",
+                "    acqparams_filename = f'{nonordic_target_folder}acqparams.txt'\n",
+                "    b02b0_filename = f'{nonordic_target_folder}b02b0.cnf'\n",
+                "    topup_output_filename = f'{nonordic_target_folder}{subject_id}_run1_APPA_topup_fieldcoef'"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "print(target_folder+acqparams_filename, os.path.exists(target_folder+acqparams_filename))\n",
+                "print(target_folder+b02b0_filename, os.path.exists(target_folder+b02b0_filename))\n",
+                "print(target_folder+topup_output_filename.split('/')[-1], os.path.exists(target_folder+topup_output_filename.split('/')[-1]))"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# convert all runs to nii\n",
+                "\n",
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "fmr_hpf_filenames = glob(high_pass_folder + '*.fmr')\n",
+                "\n",
+                "run_niftis = []\n",
+                "\n",
+                "for filename in fmr_hpf_filenames:\n",
+                "    print(f'converting {filename.split(\"/\")[-1]}', end=' ')\n",
+                "    out_file = bvpp.convert_fmr_to_nifti(nii_folder, filename)\n",
+                "    print('done!')\n",
+                "    run_niftis.append(out_file)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "run_niftis = glob(nii_folder + '*.nii.gz')\n",
+                "run_niftis = [filename for filename in run_niftis if '_PA_' not in filename]\n",
+                "pprint(run_niftis)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "topup_output_filename = f'/mnt/2b319ed7-c603-4515-a785-050dafb614bf/Data/associative_learning/Preprocessing/{subject_id}/{subject_id}_PP/{subject_id}_run1_APPA_topup_fieldcoef'\n",
+                "topup_output_filename"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# apply topup\n",
+                "\n",
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "fmr_distortion_corrected_filenames = []\n",
+                "for filename in run_niftis:\n",
+                "    print(f'applying topup on {filename.split(\"/\")[-1]} ...', end=' ')\n",
+                "    fmr_distortion_corrected_filename = bvpp.fsl_apply_topup(target_folder, filename, acqparams_filename, topup_output_filename)\n",
+                "    print('done!')\n",
+                "    fmr_distortion_corrected_filenames.append(fmr_distortion_corrected_filename)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "pprint(fmr_distortion_corrected_filenames)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# convert nii back to fmr\n",
+                "\n",
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "if not os.path.exists(topup_folder):\n",
+                "    os.mkdir(topup_folder)\n",
+                "\n",
+                "new_fmr_filenames = []\n",
+                "for fmr_distortion_corrected_filename in fmr_distortion_corrected_filenames:\n",
+                "    if 'APPA' in fmr_distortion_corrected_filename: continue\n",
+                "    print(f'converting {fmr_distortion_corrected_filename} back to fmr ...', end=' ')\n",
+                "    old_fmr_filename = glob(high_pass_folder + fmr_distortion_corrected_filename.split('/')[-1].split('_bvbabel')[0] + '*.fmr')[0]\n",
+                "    new_fmr_filename = bvpp.convert_nifti_to_fmr2(topup_folder, fmr_distortion_corrected_filename, old_fmr_filename)\n",
+                "    print('done!')\n",
+                "    new_fmr_filenames.append(new_fmr_filename)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "### Plot difference between pre and post distortion correction (topup)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "fmr_pre_topup_filenames = glob(high_pass_folder + '*.fmr')\n",
+                "fmr_post_topup_filenames = glob(topup_folder + '*.fmr')\n",
+                "\n",
+                "fmr_pre_topup_WhatOn_filenames = [filename for filename in fmr_pre_topup_filenames if 'WhatOn' in filename]\n",
+                "fmr_pre_topup_WhatOff_filenames = [filename for filename in fmr_pre_topup_filenames if 'WhatOff' in filename]\n",
+                "\n",
+                "fmr_post_topup_WhatOn_filenames = [filename for filename in fmr_post_topup_filenames if 'WhatOn' in filename]\n",
+                "fmr_post_topup_WhatOff_filenames = [filename for filename in fmr_post_topup_filenames if 'WhatOff' in filename]\n",
+                "\n",
+                "fmr_pre_topup_WhatOn_filenames = [filename for filename in fmr_pre_topup_WhatOn_filenames if '_AP_' not in filename]\n",
+                "fmr_post_topup_WhatOn_filenames = [filename for filename in fmr_post_topup_WhatOn_filenames if '_AP' not in filename]\n",
+                "\n",
+                "fmr_pre_topup_WhatOn_filenames.sort()\n",
+                "fmr_pre_topup_WhatOff_filenames.sort()\n",
+                "fmr_post_topup_WhatOn_filenames.sort()\n",
+                "fmr_post_topup_WhatOff_filenames.sort()"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "slice = 33\n",
+                "volume = 100"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "bvpp.plot_distortion_correction_gifs(target_folder, fmr_pre_topup_WhatOn_filenames, fmr_post_topup_WhatOn_filenames, 'WhatOn', slice, volume)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "bvpp.plot_distortion_correction_gifs(target_folder, fmr_pre_topup_WhatOff_filenames, fmr_post_topup_WhatOff_filenames, 'WhatOff', slice, volume)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "---\n",
+                "\n",
+                "# Anatomical Preprocessing and Coregistration"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "### 1) UNI Denoising"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "filename_uni = f'{subject_id}_UNI.v16'\n",
+                "filename_inv1 = f'{subject_id}_INV1.v16'\n",
+                "filename_inv2 = f'{subject_id}_INV2.v16'\n",
+                "\n",
+                "header, uniden = bvpp.mp2rage_genuniden(vmr_folder, 6, filename_uni, filename_inv1, filename_inv2, f'{subject_id}_uniden.v16')"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# plot original vs denoised\n",
+                "\n",
+                "uni = bvbabel.v16.read_v16(vmr_folder + filename_uni)[1]\n",
+                "\n",
+                "fig, ax = plt.subplots(2, 3, figsize=(10,10))\n",
+                "\n",
+                "ax[0][0].set_title('Transverse')\n",
+                "ax[0][0].imshow(np.rot90(uni[:,:,150]), cmap='gray')\n",
+                "ax[1][0].imshow(np.rot90(uniden[:,:,150]), cmap='gray')\n",
+                "\n",
+                "ax[0][1].set_title('Coronal')\n",
+                "ax[0][1].imshow(np.rot90(uni[:,150,:]), cmap='gray')\n",
+                "ax[1][1].imshow(np.rot90(uniden[:,150,:]), cmap='gray')\n",
+                "\n",
+                "ax[0][2].set_title('Sagital')\n",
+                "ax[0][2].imshow(np.rot90(uni[150,:,:]), cmap='gray')\n",
+                "ax[1][2].imshow(np.rot90(uniden[150,:,:]), cmap='gray')\n",
+                "\n",
+                "\n",
+                "[a.axis('off') for a in ax.flatten()]\n",
+                "plt.tight_layout()\n",
+                "nbt.embed(fig)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "### 2) Additionally, skull-stripping + denoising with nighres"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "filename_inv1 = f'{subject_id}_INV1.v16'\n",
+                "filename_inv2 = f'{subject_id}_INV2.v16'\n",
+                "\n",
+                "dataset = {\n",
+                "    'inv2': f'{vmr_folder}{subject_id}_INV2.v16',\n",
+                "    't1w': f'{vmr_folder}{subject_id}_UNI.v16',\n",
+                "    't1map': f'{vmr_folder}{subject_id}_T1.v16',\n",
+                "}\n",
+                "\n",
+                "inv2_head, inv2_img = bvbabel.v16.read_v16(dataset['inv2'])\n",
+                "uni_head, uni_img = bvbabel.v16.read_v16(dataset['t1w'])\n",
+                "t1_head, t1_img = bvbabel.v16.read_v16(dataset['t1map'])\n",
+                "\n",
+                "t1_img_nb = nb.Nifti1Image(t1_img, np.eye(4))\n",
+                "inv2_img_nb = nb.Nifti1Image(inv2_img, np.eye(4))\n",
+                "uni_img_nb = nb.Nifti1Image(uni_img, np.eye(4))\n",
+                "\n",
+                "skullstripping_results = nighres.brain.mp2rage_skullstripping(second_inversion=inv2_img_nb,\n",
+                "                                                              t1_weighted=uni_img_nb,\n",
+                "                                                              t1_map=t1_img_nb,\n",
+                "                                                              save_data=True,\n",
+                "                                                              file_name='f{subject_id}_skullstripped',\n",
+                "                                                              output_dir=f'./{subject_id}')\n",
+                "                                                              \n",
+                "removedura_results = nighres.brain.mp2rage_dura_estimation(second_inversion=inv2_img_nb,\n",
+                "                                                           skullstrip_mask=skullstripping_results['brain_mask'],\n",
+                "                                                           save_data=True,\n",
+                "                                                           file_name=f'{subject_id}_duraest',\n",
+                "                                                           output_dir=f'./{subject_id}')\n",
+                "\n",
+                "mask = (1 - nb.load(removedura_results['result']).get_fdata()) * nb.load(skullstripping_results['brain_mask']).get_fdata()\n",
+                "\n",
+                "# apply mask and save\n",
+                "\n",
+                "uniden_filename = f'{subject_id}_uniden.vmr'\n",
+                "\n",
+                "head, data = bvbabel.vmr.read_vmr(f'{vmr_folder}{uniden_filename}')\n",
+                "head_v16, data_v16 = bvbabel.v16.read_v16(f'{vmr_folder}{uniden_filename.replace(\".vmr\",\".v16\")}')\n",
+                "    \n",
+                "data = data * mask\n",
+                "data = data.astype(np.uint8)\n",
+                "\n",
+                "data_v16 = data_v16 * mask\n",
+                "data_v16 = data_v16.astype(np.uint16)\n",
+                "    \n",
+                "bvbabel.vmr.write_vmr(f'{vmr_folder}{uniden_filename.replace(\".vmr\", \"_nighres.vmr\")}', head, data)\n",
+                "bvbabel.v16.write_v16(f'{vmr_folder}{uniden_filename.replace(\".vmr\", \"_nighres.v16\")}', head_v16, data_v16)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "data = bvbabel.v16.read_v16(f'{vmr_folder}{subject_id}_uniden_nighres.v16')[1]\n",
+                "\n",
+                "fig = plt.figure()\n",
+                "plt.imshow(data[:,:,200],cmap='gray')\n",
+                "nbt.embed(fig)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "### Inhomogeneity Correction"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "uniden_filename = f'{subject_id}_uniden_nighres.vmr'\n",
+                "\n",
+                "doc_vmr = bvpp.correct_inhomogeneities(vmr_folder, uniden_filename) # correct inhomogenties and remove skull\n",
+                "doc_vmr.file_name"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "_, data_ihc = bvbabel.vmr.read_vmr(f'{subject_id}_uniden_nighres_IIHC.vmr')\n",
+                "_, data_msk = bvbabel.vmr.read_vmr(f'{subject_id}_uniden_nighres_BrainMask.vmr')\n",
+                "\n",
+                "fig, ax = plt.subplots(1, 2, figsize=(10, 5))\n",
+                "ax[0].imshow(np.rot90(data_ihc[:,:,200]))\n",
+                "ax[0].set_title('Innomogeneity Corrected')\n",
+                "ax[1].imshow(np.rot90(data_msk[:,:,200]))\n",
+                "ax[1].set_title('Brain Mask')\n",
+                "nbt.embed(fig)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "masked_filename = f'{subject_id}_uniden_nighres_IIHC.vmr'\n",
+                "\n",
+                "doc_vmr = bvpp.isovoxel(vmr_folder, masked_filename) # isovoxel the data to .4"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "_, data_iso = bvbabel.vmr.read_vmr(vmr_folder + masked_filename.replace('.vmr', '_ISO-0.4.vmr'))\n",
+                "\n",
+                "fig = plt.figure(figsize=(5, 5))\n",
+                "plt.imshow(np.rot90(data_iso[:,:,300]))\n",
+                "plt.title(f'isovoxeled image\\nshape=({data_iso.shape})')\n",
+                "nbt.embed(fig)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "### Coregistration"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "fmr_fn = [filename for filename in glob(topup_folder + '*WhatOn_run1*.fmr') if 'AP' not in filename][0]\n",
+                "vmr_fn = f'{subject_id}_uniden_nighres_IIHC_ISO-0.4.vmr'\n",
+                "\n",
+                "bvpp.coregister_bbr(target_folder, vmr_folder+vmr_fn, fmr_fn)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "if use_nordic:\n",
+                "    nonoise = '_nonoise_'\n",
+                "else:\n",
+                "    nonoise = '_'\n",
+                "\n",
+                "ETC_7x_R5 = f'{subject_id}_uniden_nighres_IIHC_ISO-0.4_ETC-7x-R5.vmr'\n",
+                "ETC_7x_R5_WM = f'{subject_id}_uniden_nighres_IIHC_ISO-0.4_ETC-7x-R5_WM.vmr'\n",
+                "run1_corregistered_for_bbr = f'{subject_id}_WhatOn_run1_M{nonoise}SCSTBL_3DMCTS_THPGLMF7c_bvbabel_topup-TO-{subject_id}_uniden_nighres_IIHC_ISO-0.4_For-BBR.vmr'\n",
+                "run1_corregistered_inv = f'{subject_id}_WhatOn_run1_M{nonoise}SCSTBL_3DMCTS_THPGLMF7c_bvbabel_topup-TO-{subject_id}_uniden_nighres_IIHC_ISO-0.4_Inv.vmr'\n",
+                "\n",
+                "_, data_ETC_7x_R5 = bvbabel.vmr.read_vmr(vmr_folder + '/' + ETC_7x_R5)\n",
+                "_, data_ETC_7x_R5_WM = bvbabel.vmr.read_vmr(vmr_folder + '/' + ETC_7x_R5_WM)\n",
+                "_, data_run1_corregistered_for_bbr = bvbabel.vmr.read_vmr(topup_folder + '/' + run1_corregistered_for_bbr)\n",
+                "_, data_run1_corregistered_inv = bvbabel.vmr.read_vmr(topup_folder + '/' + run1_corregistered_inv)\n",
+                "\n",
+                "fig, ax = plt.subplots(1, 4, figsize=(20, 5))\n",
+                "\n",
+                "ax[0].imshow(np.rot90(data_ETC_7x_R5[:,:,300]), cmap='gray')\n",
+                "ax[0].set_title(ETC_7x_R5)\n",
+                "\n",
+                "ax[1].imshow(np.rot90(data_ETC_7x_R5_WM[:,:,300]), cmap='gray')\n",
+                "ax[1].set_title(ETC_7x_R5_WM)\n",
+                "\n",
+                "ax[2].imshow(np.rot90(data_run1_corregistered_for_bbr[:,:,300]), cmap='gray')\n",
+                "ax[2].set_title('run1_corregistered_for_bbr')\n",
+                "\n",
+                "ax[3].imshow(np.rot90(data_run1_corregistered_inv[:,:,300]), cmap='gray')\n",
+                "ax[3].set_title('run1_corregistered_inv')\n",
+                "\n",
+                "plt.tight_layout()\n",
+                "nbt.embed(fig)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "### Create VTC Files"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# create vtc filenames\n",
+                "\n",
+                "fmr_filenames = glob(f'{raw_folder}*.fmr')\n",
+                "fmr_filenames.sort()\n",
+                "vtc_filenames = [filename.replace('.fmr', '.vtc') for filename in fmr_filenames]\n",
+                "vtc_filenames = [filename.replace('/fmr/', '/vtc/') for filename in vtc_filenames]\n",
+                "vtc_filenames = list(filter(lambda s: '_AP' not in s and '_PA' not in s and '_P_' not in s, vtc_filenames))\n",
+                "vtc_filenames.sort()\n",
+                "\n",
+                "pprint(vtc_filenames)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "topup_fmr_filenames = glob(f'{topup_folder}*.fmr')\n",
+                "topup_fmr_filenames = [filename for filename in topup_fmr_filenames if 'AP' not in filename and 'PA' not in filename]\n",
+                "topup_fmr_filenames.sort()\n",
+                "pprint(topup_fmr_filenames)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "reload(bvpreproc); from bvpreproc import BVPP; bvpp = BVPP(bv)\n",
+                "\n",
+                "\n",
+                "vmr_fn = f'{subject_id}_uniden_nighres_IIHC_ISO-0.4.vmr'  # this is the isovoxeled vmr\n",
+                "\n",
+                "ia_trf_fn = f'{subject_id}_WhatOn_run1_M_SCSTBL_3DMCTS_THPGLMF7c_bvbabel_topup-TO-{subject_id}_uniden_nighres_IIHC_ISO-0.4_IA.trf'\n",
+                "fa_trf_fn = f'{subject_id}_WhatOn_run1_M_SCSTBL_3DMCTS_THPGLMF7c_bvbabel_topup-TO-{subject_id}_uniden_nighres_IIHC_ISO-0.4_BBR_FA.trf'\n",
+                "\n",
+                "if not os.path.exists(vtc_folder):\n",
+                "    os.mkdir(vtc_folder)\n",
+                "\n",
+                "doc_vmr = bvpp.create_vtc(vtc_folder,\n",
+                "                          vmr_folder+vmr_fn,\n",
+                "                          topup_fmr_filenames[0],\n",
+                "                          vtc_filenames[0],\n",
+                "                          topup_folder+ia_trf_fn,\n",
+                "                          topup_folder+fa_trf_fn,\n",
+                "                          False,   # whether or not to use bounding box\n",
+                "                          None,  # array of [[xfrom, xto], [yfrom, yto], [zfrom, zto]]\n",
+                "                          1,               # create vtc in 1: native or 2: acpc space\n",
+                "                          None,       # if vtcspace is 2, give in acpc fn\n",
+                "                          False,     # use extened tal space for vtc creation (optional)\n",
+                "                          2,          # specify spatial resolution\n",
+                "                          2,   # interpolation method (0: nearest neighbor, 1: trilinear, 2: sinc)\n",
+                "                          100,     # seperate background voxels from brain voxels\n",
+                "                          2)"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "\n",
+                "ia_trf_fn = f'{subject_id}_WhatOn_run1_M_SCSTBL_3DMCTS_THPGLMF7c_bvbabel_topup-TO-{subject_id}_uniden_nighres_IIHC_ISO-0.4_IA.trf'\n",
+                "fa_trf_fn = f'{subject_id}_WhatOn_run1_M_SCSTBL_3DMCTS_THPGLMF7c_bvbabel_topup-TO-{subject_id}_uniden_nighres_IIHC_ISO-0.4_BBR_FA.trf'\n",
+                "\n",
+                "topup_folder+ia_trf_fn"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "# get bounding box values from vtc header\n",
+                "vtc_head, _ = bvbabel.vtc.read_vtc(vtc_filenames[0])\n",
+                "\n",
+                "bounding_box_array = np.array([[vtc_head['ZStart'], vtc_head['ZEnd']], \n",
+                "                               [vtc_head['XStart'], vtc_head['XEnd']], \n",
+                "                               [vtc_head['YStart'], vtc_head['YEnd']]])\n",
+                "                               \n",
+                "print('\\nBounding Box loaded: z1={}, z2={}, x1={}, x2={}, y1={}, y2={}'.format(*bounding_box_array.flatten()))\n",
+                "        "
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "bounding_box_array"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": -1,
+            "metadata": {
+            },
+            "outputs": [
+            ],
+            "source": [
+                "fmr_filenames = [filename for filename in fmr_filenames if '_AP' not in filename and '_PA' not in filename]\n",
+                "\n",
+                "for i in range(1, len(topup_fmr_filenames)):\n",
+                "    print('creating a vtc fule from ', topup_fmr_filenames[i])\n",
+                "    bvpp.create_vtc(target_folder,\n",
+                "                    vmr_folder+vmr_fn,\n",
+                "                    topup_fmr_filenames[i],\n",
+                "                    vtc_filenames[i],\n",
+                "                    topup_folder+ia_trf_fn,\n",
+                "                    topup_folder+fa_trf_fn,\n",
+                "                    True,   # whether or not to use bounding box\n",
+                "                    bounding_box_array,  # array of [[xfrom, xto], [yfrom, yto], [zfrom, zto]]\n",
+                "                    1,               # create vtc in 1: native or 2: acpc space\n",
+                "                    None,       # if vtcspace is 2, give in acpc fn\n",
+                "                    False,     # use extened tal space for vtc creation (optional)\n",
+                "                    2,          # specify spatial resolution\n",
+                "                    2,   # interpolation method (0: nearest neighbor, 1: trilinear, 2: sinc)\n",
+                "                    100,     # seperate background voxels from brain voxels\n",
+                "                    2)"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {
+            },
+            "source": [
+                "---"
+            ]
+        }
+    ],
+    "log_brainvoyager_code": false,
+    "metadata": {
+    }
+}
