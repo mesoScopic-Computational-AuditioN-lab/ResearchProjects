@@ -19,5 +19,4 @@ This produced 240 beta maps per run, which together describe the voxel’s frequ
 |------|--------------|
 | **BulkBetaEstimation.m** | Main wrapper that iterates over participants and runs to estimate single-trial beta maps for all tones presented. Produces voxel-wise beta files for each tone frequency. |
 | **BetaEstimation.m** | Core function that performs single-trial GLM fitting on each run, handling design matrix construction, HRF convolution, and model fitting. |
-| **fitGaussianPrfbasedonRanks_MM.m** | Utility for Gaussian fitting of the resulting beta-weight frequency profiles; used in later steps to map voxel-wise frequency tuning. |
 | **saveICAMap.m** | Helper function for saving beta-derived maps in BrainVoyager-compatible format (e.g., `.vmp` or `.ica` structure). |
