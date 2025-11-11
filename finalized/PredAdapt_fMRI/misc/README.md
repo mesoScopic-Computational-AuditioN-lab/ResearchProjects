@@ -1,22 +1,49 @@
-# BrainVoyager Python Plugins
+# Miscellaneous Tools and Documentation
 
-A collection of python plugins (relying on UI) made for BrainVoyager.
-Simply save the python files in the BrainVoyager/Extensions/PythonPlugins or BrainVoyager/Extensions/PythonScripts folder.
-Run by clicking `Python` > `Python Development` (or in BrainVoyager press ctrl+p), sellect the script of choice and press `Run`.
+This directory collects supplementary resources used 
 
-For dependencies look at the import section of each script (e.g. bvbabel, nibabel, numpy)
+It includes:
+- BrainVoyager plugin scripts for volume, surface, and cortical-depth operations (`Tools/`)
+- Procedural guides describing the laminar and surface mapping workflows
+- Visualisation notebooks for figure generation and experiment schematics
 
-List of available functions:
-+ `Isovoxel_Nearest.py` : Tool to IsoVoxel volumes (and VOIs) using Nearest Neighbor interpolation.
-+ `Nifti_Tools.py` : Tool to convert most BrainVoyager file formates to and from NIFTI format (and setting space to correct nifti convention).
-+ `VOI_Tools.py` : Tool to take BrainVoyager VOI files, and save namings/color values to ITKsnap and 3Dslicer readable file formats.
-+ `VTC_BOX.py`: Tool to quickly load the header information from a .vtc file, and draw a nifti bounding box based on it (usefull for manual segmenation - to see the bounds of your functional data).
-+ `VMP_Cortical_depth.py`: Tool to sample VMP files in precreated cortical depths, outputting SMP files per depth per hemisphere.
-+ `LabelMap_to_WMGM_LHRH.py`: Tool to convert labelmaps obtained from DNN (which are splitted rh+lh) and save them as two wmgm files - per hemisphere
-+ `Map_POI`: Tool to map POI from one reference frame to another using .ssm files, with the option to map one-to-one or one-to-many
-+ `BIDS_Structure_Generator.py` : Tool to automatically generate an empty BIDS-compliant folder hierarchy. Allows selection of parent directory, datatypes (anat, func, etc.), and number of subjects/sessions to quickly scaffold new datasets.
+---
 
--------------------------------------------------------------------
+## Contents
+
+| File / Folder | Description |
+|----------------|-------------|
+| **Layer_analyses.pdf** | Detailed guide for performing cortical-layer segmentation and depth sampling in BrainVoyager, combining automated and manual refinement steps. |
+| **CBA_Mapping.pdf** | Instructions for performing cortex-based alignment (CBA) and inter-subject mapping of auditory ROIs, outlining both automatic and manual procedures. |
+| **mainexp visualisation.ipynb** | Notebook visualising the overall experimental design, tone sequence structure, and analysis flow. |
+| **abstract visualisation.ipynb** | Notebook used to generate graphical abstract components illustrating key methodological steps. |
+| **Tools/** | Folder containing Python plugins for BrainVoyager. See below for details. |
+
+---
+
+## BrainVoyager Python Plugins (`Tools/`)
+
+A collection of BrainVoyager-compatible Python scripts extending the software’s functionality.  
+Save the files in  
+`BrainVoyager/Extensions/PythonPlugins/`  
+or  
+`BrainVoyager/Extensions/PythonScripts/`,  
+then run them via **Python → Python Development** (or press `Ctrl+P`) in BrainVoyager.
+
+For dependencies, check each script’s import section (commonly `bvbabel`, `nibabel`, `numpy`, etc.).
+
+| Script | Description |
+|---------|-------------|
+| **Isovoxel_Nearest.py** | IsoVoxel volumes (and VOIs) using nearest-neighbour interpolation. |
+| **Nifti_Tools.py** | Convert between BrainVoyager and NIfTI formats, ensuring correct spatial orientation. |
+| **VOI_Tools.py** | Export BrainVoyager VOIs (names/colours) to ITK-Snap and 3D-Slicer compatible formats. |
+| **VTC_BOX.py** | Read `.vtc` headers and draw NIfTI bounding boxes — useful for visualising functional data coverage. |
+| **VMP_Cortical_depth.py** | Sample VMP files within predefined cortical depths, outputting one SMP per depth per hemisphere. |
+| **LabelMap_to_WMGM_LHRH.py** | Convert DNN-derived labelmaps (split LH/RH) into white/grey matter files per hemisphere. |
+| **Map_POI.py** | Map POIs between reference frames using `.ssm` files (supports one-to-one and one-to-many mappings). |
+| **BIDS_Structure_Generator.py** | Automatically generate an empty BIDS-compliant folder hierarchy with chosen datatypes and sessions. |
+
+---
 
 Windows users: 
 `bvbabel` isnt always playing ball when intalling within a conda environment, a solution is to manually copy paste the bvbabel directory somewhere and within the scripts (before `import bvbabel`) add `import sys` & `sys.path.append('C:/path/to/parentdirectory/ofbvbabel')`.
