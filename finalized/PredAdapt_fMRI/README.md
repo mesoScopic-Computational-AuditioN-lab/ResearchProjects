@@ -15,12 +15,11 @@ Scripts are organized by experimental session and analysis stage:
 |--------|--------------|
 | **psychtoolbox_exp/** | MATLAB scripts for auditory stimulus generation and presentation, including loudness calibration, stochastic tone sequences, and quasi-random pRF mapping. |
 | **preproc_fmri/** | BrainVoyager-based preprocessing pipeline: raw data import, functional and anatomical preprocessing, alignment, and VTC creation. |
-| **bv_tools/** | Stand-alone utilities for BrainVoyager file handling (e.g., cortical-depth mapping, VOI/POI conversion, NIfTI tools). |
 | **ses1_prf_estimation/** | MATLAB routines for population receptive-field (pRF) estimation and permutation-based reliability assessment. |
 | **ses1_single_trial_betas/** | Scripts for deriving single-trial beta estimates per tone in session 1. |
 | **ses2_modelstims/** | Implementation of stimulus-driven, adaptation, and predictive models (including the long-trace adaptation and D-REX frameworks). |
 | **ses2_regressions/** | Tone-wise regression and variance-partitioning analyses linking modeled predictors to laminar fMRI responses. |
-| **misc/** | Supporting scripts, configuration examples, and figure generation utilities. |
+| **misc/** | Stand-alone utilities for BrainVoyager file handling (e.g., cortical-depth mapping, VOI/POI conversion, NIfTI tools). |
 
 ---
 
