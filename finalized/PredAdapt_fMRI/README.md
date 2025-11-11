@@ -40,8 +40,10 @@ All parameters and configurations are contained within the provided notebooks.
 
 ## Dependencies
 
-- **BrainVoyager 22.2+** (for all preprocessing and alignment steps)  
-- Optional for later analyses: MATLAB R2021a+ and Python 3.9+ with standard scientific libraries (`numpy`, `scipy`, `pandas`, `nibabel`, etc.)
+- **BrainVoyager 22.2+** — required for all preprocessing and alignment steps  
+- **MATLAB R2021a+** — for stimulus generation, presentation, and model scripts  
+- **Psychtoolbox** — for experimental presentation within MATLAB  
+- **Python 3.9+** — with standard scientific libraries (`numpy`, `scipy`, `pandas`, `nibabel`, etc.)
 
 ---
 
@@ -56,4 +58,3 @@ All parameters and configurations are contained within the provided notebooks.
 ## Notes
 
 All analysis parameters and configurations are embedded within the notebooks to facilitate transparency and reproducibility.  
-This repository is shared in support of open and reproducible neuroscience, allowing others to explore, adapt, and extend the presented analyses.
