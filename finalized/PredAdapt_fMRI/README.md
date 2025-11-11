@@ -1,0 +1,59 @@
+# Distinct Roles of Deep and Superficial Cortical Layers in Tone Prediction, Comparison, and Adaptation in Human Auditory Cortex
+
+This repository contains all pre- and post-processing scripts used for the analyses described in the paper  
+**“Distinct Roles of Deep and Superficial Cortical Layers in Tone Prediction, Comparison, and Adaptation in Human Auditory Cortex.”**
+
+The project combines 7 T fMRI with model-based analyses of stochastic tone sequences to dissociate the laminar organization of stimulus-driven, adaptive, and predictive responses in human auditory cortex.
+
+---
+
+## Repository Overview
+
+Scripts are organized by experimental session and analysis stage:
+
+| Folder | Description |
+|--------|--------------|
+| **psychtoolbox_exp/** | MATLAB scripts for auditory stimulus generation and presentation, including loudness calibration, stochastic tone sequences, and quasi-random pRF mapping. |
+| **preproc_fmri/** | BrainVoyager-based preprocessing pipeline: raw data import, functional and anatomical preprocessing, alignment, and VTC creation. |
+| **bv_tools/** | Stand-alone utilities for BrainVoyager file handling (e.g., cortical-depth mapping, VOI/POI conversion, NIfTI tools). |
+| **ses1_prf_estimation/** | MATLAB routines for population receptive-field (pRF) estimation and permutation-based reliability assessment. |
+| **ses1_single_trial_betas/** | Scripts for deriving single-trial beta estimates per tone in session 1. |
+| **ses2_modelstims/** | Implementation of stimulus-driven, adaptation, and predictive models (including the long-trace adaptation and D-REX frameworks). |
+| **ses2_regressions/** | Tone-wise regression and variance-partitioning analyses linking modeled predictors to laminar fMRI responses. |
+| **misc/** | Supporting scripts, configuration examples, and figure generation utilities. |
+
+---
+
+## Preprocessing Workflow
+
+The high-field fMRI preprocessing pipeline proceeds through:
+1. General settings and participant/session selection  
+2. Raw data preparation  
+3. Functional preprocessing  
+4. Anatomical preprocessing  
+5. Functional-anatomical coregistration  
+6. VTC generation for analysis  
+
+All parameters and configurations are contained within the provided notebooks.
+
+---
+
+## Dependencies
+
+- **BrainVoyager 22.2+** (for all preprocessing and alignment steps)  
+- Optional for later analyses: MATLAB R2021a+ and Python 3.9+ with standard scientific libraries (`numpy`, `scipy`, `pandas`, `nibabel`, etc.)
+
+---
+
+## Citation
+
+> van Haren J., de Lange F. P., Kotz S. A., & de Martino F.  
+> *Distinct Roles of Deep and Superficial Cortical Layers in Tone Prediction, Comparison, and Adaptation in Human Auditory Cortex.*  
+> (Manuscript in preparation / bioRxiv preprint forthcoming)
+
+---
+
+## Notes
+
+All analysis parameters and configurations are embedded within the notebooks to facilitate transparency and reproducibility.  
+This repository is shared in support of open and reproducible neuroscience, allowing others to explore, adapt, and extend the presented analyses.
