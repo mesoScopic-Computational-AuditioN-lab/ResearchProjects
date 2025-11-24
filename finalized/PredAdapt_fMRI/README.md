@@ -60,9 +60,6 @@ All parameters and configurations are contained within the provided notebooks.
 All datasets will be made publicly available via **[OpenNeuro.org](https://openneuro.org/datasets/ds006928)**.  
 A direct link to the corresponding dataset will be provided here once the upload is complete:
 
-**doi:** `10.18112/openneuro.dsXXXXXX.v1.0.0`
-
-
 ---
 
 ## Notes
