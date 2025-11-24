@@ -57,10 +57,8 @@ All parameters and configurations are contained within the provided notebooks.
 
 ## Data Availability
 
-All datasets will be made publicly available via **[OpenNeuro.org](https://openneuro.org)**.  
+All datasets will be made publicly available via **[OpenNeuro.org](https://openneuro.org/datasets/ds006928)**.  
 A direct link to the corresponding dataset will be provided here once the upload is complete:
-
-> **Dataset DOI / link placeholder:** _[to be added upon OpenNeuro release]_
 
 ---
 
