@@ -47,7 +47,7 @@ All parameters and configurations are contained within the provided notebooks.
 
 ---
 
-> ## Citation
+## Citation
 
 > van Haren, J., de Lange, F. P., Kotz, S. A., & De Martino, F.  
 > *Distinct Roles of Deep and Superficial Cortical Layers in Tone Prediction, Comparison, and Adaptation in Human Auditory Cortex.*  
